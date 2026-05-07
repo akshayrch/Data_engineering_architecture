@@ -1,0 +1,78 @@
+flowchart TD
+    subgraph Sources["Data Sources"]
+        KAFKA[Kafka\necommerce-events]
+        CDC[CDC / Debezium\nPostgreSQL changes]
+        BATCH[Batch Files\nPartner / Historical]
+    end
+
+    subgraph Ingest["Ingestion — Spark Structured Streaming"]
+        STREAM_JOB[Spark Streaming Job\nKafka → Iceberg Bronze\nExactly-once commits]
+    end
+
+    subgraph Storage["Object Storage — S3"]
+        subgraph Bronze["Bronze Iceberg Tables"]
+            B1[raw_events/\nAppend-only\nFull JSON]
+            B2[raw_catalog_snapshots/]
+        end
+        subgraph Silver["Silver Iceberg Tables"]
+            S1[events_clean/\nDeduplicated via MERGE INTO\nType-validated]
+            S2[events_enriched/\nJoined dimensions]
+        end
+        subgraph Gold["Gold Iceberg Tables"]
+            G1[gold_daily_revenue/]
+            G2[gold_funnel_metrics/]
+            G3[gold_user_cohorts/]
+        end
+    end
+
+    subgraph Catalog["Metadata Catalog — AWS Glue"]
+        META[Iceberg Metadata\nSchema history\nSnapshot log\nPartition spec]
+    end
+
+    subgraph Compute["Multi-Engine Compute"]
+        SPARK[Spark / EMR\nBatch transforms\nML training]
+        ATHENA[Athena\nAd-hoc SQL\nAnalyst queries]
+        FLINK[Flink\nStreaming consumers]
+        DBT[dbt\nGold layer transforms]
+    end
+
+    subgraph Features["ACID Features in Use"]
+        MERGE[MERGE INTO\nUpsert / Deduplication]
+        TT[Time Travel\nAS OF timestamp]
+        SE[Schema Evolution\nAdd/rename columns]
+        COMPACT[Compaction Job\nFile size optimization]
+    end
+
+    KAFKA --> STREAM_JOB
+    CDC --> STREAM_JOB
+    BATCH --> STREAM_JOB
+
+    STREAM_JOB --> B1
+    STREAM_JOB --> B2
+
+    B1 --> S1
+    S1 --> MERGE
+    MERGE --> S1
+    S1 --> S2
+
+    S2 --> G1
+    S2 --> G2
+    S2 --> G3
+
+    B1 & S1 & S2 & G1 & G2 & G3 <--> META
+
+    G1 & G2 & G3 --> SPARK
+    G1 & G2 & G3 --> ATHENA
+    S1 & S2 --> FLINK
+    S2 --> DBT
+    DBT --> G1
+
+    COMPACT -.->|maintains| B1
+    COMPACT -.->|maintains| S1
+    TT -.->|queries any snapshot| S1
+    SE -.->|evolves schema| S1
+
+    style Bronze fill:#cd7f32,color:#fff,stroke:#8B4513
+    style Silver fill:#C0C0C0,color:#000,stroke:#A9A9A9
+    style Gold fill:#FFD700,color:#000,stroke:#DAA520
+    style Features fill:#e8f4f8,stroke:#3498db

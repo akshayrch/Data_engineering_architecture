@@ -1,0 +1,57 @@
+flowchart TD
+    subgraph Sources["Data Sources"]
+        WEB[Web Browser Events]
+        MOB[Mobile App Events]
+        API[API / Backend Events]
+    end
+
+    subgraph Log["Immutable Event Log"]
+        KAFKA[Kafka Topic\necommerce-events\n7-day hot retention]
+        S3LOG[S3 Event Archive\nLong-term retention\nParquet by date]
+    end
+
+    subgraph Processing["Single Unified Processing Layer"]
+        SSS[Spark Structured Streaming\nOne job — handles real-time AND reprocessing]
+        CKPT[Checkpoint Store\nS3 / exactly-once guarantee]
+    end
+
+    subgraph Reprocessing["Reprocessing Path (when needed)"]
+        REPLAY[Kafka Replay Topic\nLoaded from S3 archive]
+        direction LR
+    end
+
+    subgraph Outputs["Output Sinks"]
+        S3OUT[S3 Analytics Output\nParquet / Iceberg]
+        REDIS[Redis\nReal-time state]
+        PG[PostgreSQL\nOperational queries]
+    end
+
+    subgraph Serving["Serving Layer"]
+        SINGLE[Single Consistent View\nNo merge logic needed]
+        ATHENA[Athena / Presto]
+        API2[REST API]
+    end
+
+    WEB --> KAFKA
+    MOB --> KAFKA
+    API --> KAFKA
+
+    KAFKA --> S3LOG
+    KAFKA --> SSS
+    SSS <--> CKPT
+
+    S3LOG --> REPLAY
+    REPLAY --> SSS
+
+    SSS --> S3OUT
+    SSS --> REDIS
+    SSS --> PG
+
+    S3OUT --> SINGLE
+    REDIS --> SINGLE
+    PG --> SINGLE
+    SINGLE --> ATHENA
+    SINGLE --> API2
+
+    style Reprocessing fill:#fff3cd,stroke:#ffc107
+    style Processing fill:#d4edda,stroke:#28a745

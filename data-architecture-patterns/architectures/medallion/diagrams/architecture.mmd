@@ -1,0 +1,68 @@
+flowchart TD
+    subgraph Sources["Data Sources"]
+        KAFKA[Kafka\necommerce-events]
+        DB[PostgreSQL\nProduct Catalog / Users]
+        BATCH_FILES[Batch File Drops\nHistorical / Partner data]
+    end
+
+    subgraph Bronze["🥉 Bronze Layer — Raw Ingestion (Append-Only)"]
+        B_EVENTS[raw_events/\nExact JSON as received\n+ ingestion_ts, source_id]
+        B_CATALOG[raw_product_catalog/\nFull snapshots]
+        B_META[Metadata\nbatch_id, file_name, row_count]
+    end
+
+    subgraph Silver["🥈 Silver Layer — Cleaned & Conformed"]
+        S_EVENTS[events_clean/\nDeduplicated\nType-validated\nNull-handled]
+        S_ENRICHED[events_enriched/\nJoined to product catalog\nJoined to user profiles]
+        S_SESSIONS[user_sessions/\nSession-attributed events]
+        DQ[Data Quality Checks\nGreat Expectations assertions]
+    end
+
+    subgraph Gold["🥇 Gold Layer — Business Aggregates"]
+        G_REV[gold_daily_revenue\nby product / category / region]
+        G_FUNNEL[gold_funnel_metrics\ndaily conversion rates]
+        G_COHORT[gold_user_cohorts\n30d / 90d retention]
+        G_CART[gold_cart_abandonment\nrate + recovery revenue]
+        G_PROD[gold_product_performance\nimpression → purchase rate]
+    end
+
+    subgraph Consumers["Consumers"]
+        BI[BI / Dashboards\nTableau / Looker]
+        ANALYSTS[Analysts\nAd-hoc SQL via Athena]
+        ML[ML Feature Store\nTraining datasets]
+        REPORTS[Finance Reports\nCertified numbers]
+    end
+
+    subgraph Orchestration["Orchestration"]
+        AIRFLOW[Airflow DAG\nBronze → Silver → Gold\ndependency chain]
+    end
+
+    KAFKA --> B_EVENTS
+    DB --> B_CATALOG
+    BATCH_FILES --> B_EVENTS
+
+    B_EVENTS --> S_EVENTS
+    B_CATALOG --> S_ENRICHED
+    S_EVENTS --> DQ
+    DQ --> S_ENRICHED
+    S_ENRICHED --> S_SESSIONS
+
+    S_EVENTS --> G_FUNNEL
+    S_ENRICHED --> G_REV
+    S_ENRICHED --> G_PROD
+    S_SESSIONS --> G_COHORT
+    S_SESSIONS --> G_CART
+
+    G_REV --> BI
+    G_FUNNEL --> BI
+    G_COHORT --> ANALYSTS
+    G_CART --> REPORTS
+    G_PROD --> ML
+
+    AIRFLOW -.->|triggers| B_EVENTS
+    AIRFLOW -.->|triggers| S_EVENTS
+    AIRFLOW -.->|triggers| G_REV
+
+    style Bronze fill:#cd7f32,color:#fff,stroke:#8B4513
+    style Silver fill:#C0C0C0,color:#000,stroke:#A9A9A9
+    style Gold fill:#FFD700,color:#000,stroke:#DAA520

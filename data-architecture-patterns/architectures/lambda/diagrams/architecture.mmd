@@ -1,0 +1,54 @@
+flowchart TD
+    subgraph Sources["Data Sources"]
+        WEB[Web Browser Events]
+        MOB[Mobile App Events]
+        API[API / Backend Events]
+    end
+
+    subgraph Ingestion["Ingestion Layer"]
+        KAFKA[Kafka Topic\necommerce-events]
+        S3RAW[S3 Raw Storage\nbucket/raw/year=.../]
+    end
+
+    subgraph BatchLayer["Batch Layer (Correctness)"]
+        SPARK_BATCH[PySpark Jobs\nDaily full recompute]
+        BATCH_OUT[S3 Batch Output\nParquet / partitioned by date]
+    end
+
+    subgraph SpeedLayer["Speed Layer (Latency)"]
+        SPARK_STREAM[Spark Structured Streaming\nMicro-batch every 30s]
+        SPEED_STATE[In-Memory / Redis State\nRecent window only]
+    end
+
+    subgraph ServingLayer["Serving Layer (Merge)"]
+        MERGE[Query Merge Logic\nBatch for t-1, Speed for today]
+        ATHENA[Athena / Presto\nSQL Interface]
+    end
+
+    subgraph Consumers["Consumers"]
+        DASH[Revenue Dashboard]
+        ALERTS[Cart Abandonment Alerts]
+        REPORTS[Historical Reports]
+        ML[ML Feature Store]
+    end
+
+    WEB --> KAFKA
+    MOB --> KAFKA
+    API --> KAFKA
+
+    KAFKA --> S3RAW
+    KAFKA --> SPARK_STREAM
+
+    S3RAW --> SPARK_BATCH
+    SPARK_BATCH --> BATCH_OUT
+
+    SPARK_STREAM --> SPEED_STATE
+
+    BATCH_OUT --> MERGE
+    SPEED_STATE --> MERGE
+    MERGE --> ATHENA
+
+    ATHENA --> DASH
+    ATHENA --> ALERTS
+    ATHENA --> REPORTS
+    ATHENA --> ML
