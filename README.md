@@ -1,8 +1,5 @@
-# DE Architecture Mastery — Folder Index
+# DE Architecture Mastery
 
-**What this folder is:** Your 18-week (Apr 20 – Aug 20, 2026) study plan for Lead/Staff Data Engineering interviews at FAANG, fintech/trading, and analytics-engineering shops.
-
----
 
 ## Where do I start?
 
